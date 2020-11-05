@@ -9,17 +9,20 @@
 # include <stdint.h>
 # include <pwd.h>
 # include <fcntl.h>
+# include <grp.h>
 
 # define BLOCK_SIZE 512
 
 int format_name_prefix(char *name, char *prefix, 
 				char *file, char *path){
 
-	int len_path = 0;
-	if (path != NULL)
+	int len_path;
+	if (path == NULL)
 	len_path = 0;
 	else if(path[0] == '\0')
 	len_path = 0;
+	else
+	len_path = strlen(path);
 	/*If everything fits in name ...*/
 	if (strlen(file) + len_path + 1 <= 100){
 
@@ -28,6 +31,7 @@ int format_name_prefix(char *name, char *prefix,
         for (count = 0; count < len_path; count++)
         name[count] = path[count];
         name[count] = '\0';
+	if (len_path != 0)
 	strcat(name, "/");
         strcat(name, file);
 	return 0;
@@ -131,16 +135,18 @@ int format_from_lstat(char *file, char *path, char *mode,
 	char *ret;
 	int inter;
 	struct passwd *pass;
-	/*Finding file ...*/
+	struct group *group;
+
+	/*Finding file ...
 	if (path != NULL){
 
-	/*Report error ...*/
-        if(chdir(path) != 0){
-        perror(path);
-        return -1;
-        }	
+        	if(chdir(path) != 0){
+        	perror(path);
+        	return -1;
+       		}	
 	}
-	
+	}*/
+
 	if (-1 == lstat(file, &buf)){
 	perror("lstat");
 	return -1;
@@ -201,9 +207,9 @@ int format_from_lstat(char *file, char *path, char *mode,
 	pass = getpwuid(buf.st_uid);
 	if (pass != NULL)
 	strcpy(uname, pass -> pw_name);
-	pass = getpwuid(buf.st_gid);
-	if (pass != NULL)
-        strcpy(uname, pass -> pw_name);
+	group = getgrgid(buf.st_gid);
+	if (group != NULL)
+        strcpy(gname, group -> gr_name);
 
 	/*Getting size ...*/
 	if (S_ISREG(buf.st_mode)){	
@@ -254,7 +260,7 @@ void write_header(char *file, char *path, int fd_out){
 	char *gid = calloc(8, 1);
 	char *size = calloc(12, 1); /*Directories and symlinks are zero*/
 	char *mtime = calloc(12, 1);
-	uint8_t *chksum = calloc(8, 1);
+	char *chksum = calloc(8, 1);
 	char *typeflag = calloc(1, 1);
 	char *linkname = calloc(100, 1);/*NUL-terminated if NUL fits*/
 	char *magic = calloc(6, 1);/*must ve "ustar", NUL-terminated*/
@@ -265,10 +271,11 @@ void write_header(char *file, char *path, int fd_out){
 	char *devminor = calloc(8, 1);
 	char *prefix = calloc(155, 1);/*NUL-terminated if NUL fits*/
 	uint8_t *buf = calloc(BLOCK_SIZE, 1);
+	int sum;
 	int count = 0;
 	/*If unable to format name, ignore file ...*/
 	if(format_name_prefix(name, prefix, file, path) == -1){
-	printf("unable to format file %s with path %s", file, path);
+	perror("format name");
 	return;
 	}
 
@@ -276,7 +283,7 @@ void write_header(char *file, char *path, int fd_out){
 	if(format_from_lstat(file, path, mode, uid, gid, size, 
 				mtime, typeflag, devmajor, 
 				devminor, linkname, uname, gname) == -1){
-        printf("unable to format file %s with path %s", file, path);
+	perror("format from lstat");
         return;
         }
 	/*Magic number and version ...*/
@@ -326,7 +333,15 @@ void write_header(char *file, char *path, int fd_out){
 
 
 	}
-
+	
+	/*Getting/writing chksum ...*/
+	for (count = 0; count < BLOCK_SIZE; count++)
+	sum = sum + buf[count];
+	sum = sum + 8*((uint8_t) ' '); /*Adding plus 8 spaces for 
+						chksum*/
+	strcpy(chksum, dec_to_stroct(sum, 8));
+	for (count = 148; count < 156; count++)
+	buf[count] = chksum[count - 148];
 
 	if (write(fd_out, buf, BLOCK_SIZE) != BLOCK_SIZE){
 	perror("write");	
@@ -350,7 +365,7 @@ int write_file(int fd_in, int fd_out){
         perror("read");
 	return -1;}
 	/*Writing left-overs ...*/
-	if (ret < BLOCK_SIZE){
+	if (ret < BLOCK_SIZE && ret != 0){
 	if (write(fd_out, &buf,  BLOCK_SIZE) !=  BLOCK_SIZE){
         perror("read");
         return -1;
@@ -360,17 +375,17 @@ int write_file(int fd_in, int fd_out){
 }
 
 /*Use stat*/
-int dfs(const char *path, const char *name){
+int dfs(char *path, int fd_tar, int *flag_v){
 	DIR *dp;
 	struct dirent *entry;
 	struct stat buf; /*used for checking entries*/
-	
+	char *test = malloc(100);	
 	/*Report error and don't stop ...*/
 	if(chdir(path) != 0){
 	perror(path);
 	return 0;
 	}
-	
+	free(test);
 	/*Opening directory specified*/
 	dp = opendir(".");
 	if (dp == NULL){
@@ -388,27 +403,35 @@ int dfs(const char *path, const char *name){
 		/*Strcpy was giving me a hard time ...*/
 		char *new_path = calloc(PATH_MAX, 1);
 		int count = 0;
+		int fd_in ;
 		for (count = 0; count < strlen(path); count++)
 		new_path[count] = path[count];
 		new_path[count] = '\0';
 		strcat(new_path, "/");
                 strcat(new_path , entry ->d_name);
-		if (stat(new_path, &buf) != 0){
+		if (*flag_v == 1)
+		printf("%s\n", new_path);
+		if (stat(entry -> d_name, &buf) != 0){
                         perror("stat");
                      	continue;
 			   }
-		/*Not interested in symlinks ...*/
+		/*Interested in symlinks ...*/
 		else if (S_ISLNK(buf.st_mode))
-		continue;
-
+		write_header(new_path, NULL, fd_tar);
 		/*If a direcory, traverse down ...*/
 		else if (S_ISDIR(buf.st_mode) ){
-		dfs(new_path, name);
+		write_header(entry -> d_name, path, fd_tar);
+		dfs(entry -> d_name, fd_tar, flag_v);
 		}
 		
 		/*If we find a file with the name, 
   		  print its path and continue ...*/
-		else if (S_ISREG(buf.st_mode)){
+		else if (S_ISREG(buf.st_mode)){	
+		write_header(entry -> d_name, path, fd_tar);
+		fd_in = open(entry -> d_name,   O_RDONLY);
+                if (fd_in == -1)
+                perror("open");
+		write_file(fd_in, fd_tar);	
 		/*Call header*/	
 		}
 		/* free(new_path);*/
@@ -418,12 +441,21 @@ int dfs(const char *path, const char *name){
 	return 0;
 }
 
+void read_tar(int fd_tar, int *flag_v, int *flag_t, int *flag_x)
+{
+	uint8_t buf[BLOCK_SIZE];
+
+
+
+}
+
+
 void command_parser( int *flag_c, int *flag_t, int *flag_x, int *flag_v, 
 			int *flag_S, int argc, char *argv[]){
 	int count;
 	if (argc < 3){
         perror("Usage: mytar [ctcvS]f tarfile [ path [ ... ] ]");
-        exit(1);
+        exit(EXIT_FAILURE);
         }
 
 
@@ -439,9 +471,28 @@ void command_parser( int *flag_c, int *flag_t, int *flag_x, int *flag_v,
 		else if(argv[1][count] == 'S')
 		 *flag_c = 1;
 		else
-		printf("unknown flag: %c/n", argv[1][count]);	
+		printf("unknown flag: %c\n", argv[1][count]);	
 
 	}
+}
+
+void check_tar(char *file_tar){
+	struct stat buf;
+	if (-1 == lstat(file_tar, &buf)){
+	perror("lstat");
+	exit(EXIT_FAILURE);
+	}
+	
+	if (S_ISREG(buf.st_mode) || 	 /*tar should be reg. files*/
+	buf.st_size % BLOCK_SIZE == 0 || /*tar should have integer # blocks*/
+	buf.st_size == 0)		 /*tar should be non=empty*/
+	return;
+	else{
+	perror("malformed tar file");
+        exit(EXIT_FAILURE);
+	}
+	
+
 }
 
 int main(int argc, char *argv[]){
@@ -451,13 +502,15 @@ int main(int argc, char *argv[]){
 	int *flag_x = malloc(sizeof(int));
 	int *flag_v = malloc(sizeof(int));
 	int *flag_S = malloc(sizeof(int));
+	uint8_t *end_tar = calloc(2*BLOCK_SIZE, 1);
+	int count;
+	struct stat buf;	
 
+	int fd_tar;
 	int fd_in;
-	int fd_header;
-	int fd_file;
 
 	if ((flag_c == NULL) || (flag_t == NULL)
-		|| (flag_x == NULL) ||
+		|| (flag_x == NULL) || (end_tar == NULL) ||
 		 (flag_v == NULL) || (flag_S == NULL))
 	{
 	perror("malloc");
@@ -472,17 +525,61 @@ int main(int argc, char *argv[]){
         *flag_v = 0;
         *flag_S = 0;
 		
-/*	command_parser(flag_c, flag_t, flag_x, flag_v,
-			 flag_S, argc, argv);*/
+	command_parser(flag_c, flag_t, flag_x, flag_v,
+			 flag_S, argc, argv);
+
+	/*If we are not creating or listing or extracting, 
+ 	  what's the point ...*/
+	if (*flag_c == 0  && 
+	    *flag_t == 0  && 
+	    *flag_x == 0){
+	perror("Usage: mytar [ctcvS]f tarfile [ path [ ... ] ]");
+	exit(EXIT_FAILURE);
+	}
+
+	fd_tar = open(argv[2], O_RDWR | O_CREAT | O_TRUNC,
+                 (S_IWUSR | S_IXUSR| S_IRUSR | S_IROTH | S_IXOTH | S_IWOTH) );
+        if (fd_tar == -1){
+        perror("couldn't create tar file");
+        exit(EXIT_FAILURE);
+        }
+
 
 	/*Creating a new archive file ...*/	
+	if (*flag_c == 1){
+
+	/*Writing all arguments ...*/
+	for (count = 3; count < argc; count++){
+	write_header(argv[count], NULL, fd_tar);	
+	if (-1 == lstat(argv[count], &buf))
+	perror("lstat");
+	if (*flag_v == 1)
+	printf("%s\n", argv[count]);	
+	/*If a dir, don't write file but traverse it ...*/
+	if (S_ISDIR(buf.st_mode))
+	dfs(argv[count], fd_tar, flag_v);
+	/*If a regular file, write file ...*/
+	if (S_ISREG(buf.st_mode)){
+	fd_in = open(argv[count],   O_RDONLY);
+	if (fd_in == -1){
+        perror(argv[count]);
+        }
+	write_file(fd_in, fd_tar);}
+	}
+
+	/*Writing 2 NULL data blocks at end ...*/
+	if (write(fd_tar, end_tar, 2*BLOCK_SIZE) != 2*BLOCK_SIZE)
+	perror("write");
+	free(end_tar);
+	}
 	
-	fd_in = open("Makefile",   O_RDONLY);
-	fd_header =  open("test_header", O_RDWR);
-	fd_file = open("test_header", O_RDWR);
-	
-	write_header("Makefile", NULL, fd_header);
-	write_file(fd_in, fd_file);
+	else if(*flag_t == 1 || *flag_x == 1){
+	check_tar(argv[1]);
+	read_tar(fd_tar, *flag_v, flag_t, flag_x);
+	}
+
+
+		
 
 	free(flag_c);
 	free(flag_t);	
