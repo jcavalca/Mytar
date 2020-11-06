@@ -11,10 +11,15 @@
 # include <fcntl.h>
 # include <grp.h>
 # include <arpa/inet.h>
+# include "special.c"
+# include <time.h>
+
 
 # define BLOCK_SIZE 512
 # define CAP_8 2097151
 # define CAP_12 8589934591
+
+
 int format_name_prefix(char *name, char *prefix, 
 				char *file, char *path){
 
@@ -91,6 +96,7 @@ int format_name_prefix(char *name, char *prefix,
 	name_count++;
 	}
 	}
+	if (name[name_count -1] != '/')
 	name[name_count] = '/';
 	name_count++;
 		/*Put file name on name*/
@@ -144,7 +150,6 @@ int format_from_lstat(char *file, char *path, char *mode,
 	int perm = 0;	
 	char conversions[8] = {'0', '1', '2', '3', '4', '5', '6', '7'};	
 	char *ret;
-	int inter;
 	struct passwd *pass;
 	struct group *group;
 
@@ -246,15 +251,6 @@ int format_from_lstat(char *file, char *path, char *mode,
 	*typeflag = '0';
 	}
 
-	/*Getting major and minor dev numbs ...*/
-
-/*	inter = major(buf.st_dev);
-	if (inter != 0)
-	strcpy(devmajor, dec_to_stroct(inter, 8));
-	inter = minor(buf.st_dev);
-	printf("minor: %d\n", inter);
-	if (inter != 0)
-	strcpy(devminor, dec_to_stroct(inter,  8));	*/
 
 	/*If link ...*/
 	if (S_ISLNK(buf.st_mode)){
@@ -309,7 +305,6 @@ void write_header(char *file, char *path, int fd_out){
 	/*Chksum ... */
 	*chksum = 0;
 
-
 	for (count = 0; count < BLOCK_SIZE; count++){
 
 	if (count < 100)
@@ -344,9 +339,6 @@ void write_header(char *file, char *path, int fd_out){
 	buf[count] = devminor[count - 337];
 	}else if (count < 510)
 	buf[count] = prefix[count - 345];
-
-
-
 
 	}
 	sum = 0;	
@@ -463,32 +455,168 @@ int dfs(char *path, int fd_tar, int *flag_v){
 	closedir(dp);
 	return 0;
 }
+
+
+void print_perm(int mode_int){
+
+ 	if (mode_int & S_IRUSR)
+        printf("r");
+        else
+        printf("-");
+        if(mode_int & S_IWUSR)
+        printf("w");
+        else
+        printf("-");
+        if(mode_int & S_IXUSR)
+        printf("x");
+        else
+        printf("-");
+
+        if (mode_int & S_IRGRP)
+        printf("r");
+        else
+        printf("-");
+        if(mode_int & S_IWGRP)
+        printf("w");
+        else
+        printf("-");
+        if(mode_int & S_IXGRP)
+        printf("x");
+        else
+        printf("-");
+
+         if (mode_int & S_IROTH)
+        printf("r");
+        else
+        printf("-");
+        if(mode_int & S_IWOTH)
+        printf("w");
+        else
+        printf("-");
+        if(mode_int & S_IXOTH)
+        printf("x");
+        else
+        printf("-");
+
+        printf(" ");
+}
+
+void print_type(char *typeflag){
+if (*typeflag == '0' || *typeflag == '\0')
+        printf("-");
+        else if (*typeflag == '2')
+        printf("l");
+        else if (*typeflag == '5')
+        printf("d");
+}
+
+void print_names(uint8_t buf[BLOCK_SIZE], char *uname, char *gname){
+	
+	int count;
+	for (count = 265; count < 273; count++){
+        if (buf[count] == '\0')
+        break;
+        uname[count - 265] = buf[count];
+        }
+
+        printf("%s/", uname);
+        for (count = 297; count < 305; count++){
+        if (buf[count] == '\0')
+        break;
+        gname[count - 297] = buf[count];
+        }
+        printf("%s", gname);
+	printf("  ");
+}
+
+void print_size(char *size, uint8_t buf[BLOCK_SIZE]){
+
+	int32_t val;
+	int count;
+  	for (count = 124; count < 136; count++)
+        size[count - 124] = buf[count];
+  	if(size[0] & 0x80)
+ 	val = extract_special_int(size, 12);
+        else
+        val = strtol(size, NULL, 8);
+        printf( "%13d", val);
+	printf(" ");	
+
+}
+
+void print_mtime(char *mtime, uint8_t buf[BLOCK_SIZE]){
+	const struct tm *tm;
+	time_t val;
+        int count;
+       	char out[20];
+	for (count = 136; count < 148; count++)
+        mtime[count - 136] = buf[count];
+        if(mtime[0] & 0x80)
+        val = extract_special_int(mtime, 12);
+        else
+        val = strtol(mtime, NULL, 8);	
+	tm = localtime(&val);
+	if (tm != NULL)
+	strftime(out, 20, "%Y-%m-%d %H:%M", tm);
+	printf("%s ", out);
+
+
+}
+
 /*For listind we need name (if verbose is on,
  * 				 we also need size, perm, 
  * 				 user/grp and mtime)
- *For extracting we need name and perms. */
-
-void read_tar(int fd_tar, int *flag_v, int *flag_t, int *flag_x)
+*/
+void read_list(int fd_tar, int *flag_v, int *flag_t)
 {
 	uint8_t buf[BLOCK_SIZE];
 	int count;
-	char *file_name = calloc(200);
-	char *mode = calloc(8);	
-	char *uid;
-	char *gid;
+	char *file_name = calloc(200, 1);
+	char *mode;	
+	char *uname;
+	char *gname;
 	char *mtime;
+	char *typeflag;
+	char *size;
+	int mode_int;
 
-	if (*flag_v == 1 && *flag_t == 1){
-	uid = calloc(8);
-	gid = calloc(8);
-	mtime = calloc(8);
-	if (uid == NULL || gid == NULL || mtime== NULL){
-	perror("malloc");
-	exit(EXIT_FAILURE);}
-	}
-
+	if (-1 == lseek(fd_tar, SEEK_SET, 0))
+	perror("unable to read tar");
 
 	read(fd_tar, &buf, BLOCK_SIZE);
+	
+	if (*flag_v == 1 && *flag_t == 1){
+	uname = calloc(8, 1);
+	gname = calloc(8, 1);
+	mtime = calloc(8, 1);
+	typeflag = calloc(1,1);
+	mode = calloc(8, 1);
+	size = calloc(12, 1);
+	if (uname == NULL || gname== NULL ||
+	    mtime== NULL || typeflag == NULL){
+	perror("malloc");
+	exit(EXIT_FAILURE);}
+
+	/*Type of file ...*/
+	*typeflag = buf[156];
+	print_type(typeflag);
+	/*Mode ..*/
+	for (count = 100; count < 108; count++)
+	mode[count - 100] = buf[count];
+	mode_int = strtol(mode, NULL, 8);
+	print_perm(mode_int);
+	/*Names*/
+	print_names(buf, uname, gname);
+	/*Size*/
+	print_size(size, buf);
+	/*mtime*/
+	print_mtime(mtime, buf);
+	}
+
+	if (file_name == NULL){
+	perror("malloc");
+        exit(EXIT_FAILURE);}
+
 	/*No prefix ...*/
 	if (buf[345] == '\0'){
 	for (count = 0; count < 100; count++)
@@ -505,13 +633,7 @@ void read_tar(int fd_tar, int *flag_v, int *flag_t, int *flag_x)
 	}
 	printf("%s \n", file_name);
 
-	if (*flag_v == 1 && *flag_t == 1){
-	free(uid);
-	free(gid);
-	free(mtime);
-        }
 
-	free(mode);
 	free(file_name);	
 }
 
@@ -561,23 +683,7 @@ void check_tar(char *file_tar){
 
 }
 
-/*Given function ...*/
-int insert_special_int(char *where, size_t size, int32_t val){
 
-int err = 0;	
-
-if (val < 0 || (size < sizeof(val)) ){
-err++;
-}else{
-
-memset(where, 0, size);
-*(int32_t *)(where+size-sizeof(val)) = htonl(val);
-*where |= 0x80;
-}
-
-return err;
-
-}
 
 int main(int argc, char *argv[]){
 	
@@ -621,7 +727,10 @@ int main(int argc, char *argv[]){
 	exit(EXIT_FAILURE);
 	}
 
-	fd_tar = open(argv[2], O_RDWR | O_CREAT | O_TRUNC,
+	/*Creating a new archive file ...*/	
+	if (*flag_c == 1){
+
+	 fd_tar = open(argv[2], O_RDWR | O_CREAT | O_TRUNC,
                  (S_IWUSR | S_IXUSR| S_IRUSR | S_IROTH | S_IXOTH | S_IWOTH) );
         if (fd_tar == -1){
         perror("couldn't create tar file");
@@ -629,8 +738,6 @@ int main(int argc, char *argv[]){
         }
 
 
-	/*Creating a new archive file ...*/	
-	if (*flag_c == 1){
 
 	/*Writing all arguments ...*/
 	for (count = 3; count < argc; count++){
@@ -657,9 +764,15 @@ int main(int argc, char *argv[]){
 	free(end_tar);
 	}
 	
-	else if(*flag_t == 1 || *flag_x == 1){
-	check_tar(argv[1]);
-	read_tar(fd_tar, *flag_v, flag_t, flag_x);
+	else if(*flag_t == 1){
+	fd_tar = open(argv[2], O_RDONLY);
+	if (-1 == fd_tar){
+	perror("could not open tar");	
+	exit(EXIT_FAILURE);
+	}
+	
+	check_tar(argv[2]);
+	read_list(fd_tar, flag_v, flag_t);
 	}
 
 
