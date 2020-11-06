@@ -10,9 +10,11 @@
 # include <pwd.h>
 # include <fcntl.h>
 # include <grp.h>
+# include <arpa/inet.h>
 
 # define BLOCK_SIZE 512
-
+# define CAP_8 2097151
+# define CAP_12 8589934591
 int format_name_prefix(char *name, char *prefix, 
 				char *file, char *path){
 
@@ -32,6 +34,7 @@ int format_name_prefix(char *name, char *prefix,
         name[count] = path[count];
         name[count] = '\0';
 	if (len_path != 0)
+	if (name[count -1] != '/')
 	strcat(name, "/");
         strcat(name, file);
 	return 0;
@@ -123,6 +126,14 @@ char *dec_to_stroct(int n, int size){
 
 }
 
+int non_conforming_check(int numb, uint64_t cap){
+if (numb > cap)
+return -1;
+else
+return 0;
+
+}
+
 int format_from_lstat(char *file, char *path, char *mode, 
 			char *uid, char *gid, char *size,
 			char *mtime, char *typeflag, 
@@ -137,15 +148,6 @@ int format_from_lstat(char *file, char *path, char *mode,
 	struct passwd *pass;
 	struct group *group;
 
-	/*Finding file ...
-	if (path != NULL){
-
-        	if(chdir(path) != 0){
-        	perror(path);
-        	return -1;
-       		}	
-	}
-	}*/
 
 	if (-1 == lstat(file, &buf)){
 	perror("lstat");
@@ -196,12 +198,18 @@ int format_from_lstat(char *file, char *path, char *mode,
 	perm = 0;
 	
 	/*Getting UID and GID values ...*/
-	ret = dec_to_stroct(buf.st_uid, 12);
+	if (non_conforming_check((int) buf.st_uid, CAP_8)){
+	insert_special_int(uid, 8, (int32_t) buf.st_uid);
+	}else{
+	ret = dec_to_stroct(buf.st_uid, 8);
 	strcpy(uid, ret);
-	free(ret);
-	ret = dec_to_stroct(buf.st_gid, 12);
+	free(ret);}
+	 if (non_conforming_check((int) buf.st_gid, CAP_8)){
+        insert_special_int(gid, 8, (int32_t) buf.st_gid);
+        }else{
+	ret = dec_to_stroct(buf.st_gid, 8);
 	strcpy(gid, ret);
-        free(ret);	
+        free(ret);}
 	
 	/*Uname and Gname ...*/
 	pass = getpwuid(buf.st_uid);
@@ -213,9 +221,14 @@ int format_from_lstat(char *file, char *path, char *mode,
 
 	/*Getting size ...*/
 	if (S_ISREG(buf.st_mode)){	
-	ret = dec_to_stroct(buf.st_size, 12);
-	strcpy(size, ret);
-	free(ret);}
+
+		if (non_conforming_check((int) buf.st_size, 8589934591))
+		insert_special_int(size, 8, (int32_t) buf.st_size);
+		else{
+		ret = dec_to_stroct(buf.st_size, 12);
+		strcpy(size, ret);
+		free(ret);}
+	}
 	else{size = strcpy(size, "00000000000");}
 
 	/*Getting mtime ...*/
@@ -235,10 +248,13 @@ int format_from_lstat(char *file, char *path, char *mode,
 
 	/*Getting major and minor dev numbs ...*/
 
-	inter = major(buf.st_dev);
+/*	inter = major(buf.st_dev);
+	if (inter != 0)
 	strcpy(devmajor, dec_to_stroct(inter, 8));
 	inter = minor(buf.st_dev);
-	strcpy(devminor, dec_to_stroct(inter,  8));	
+	printf("minor: %d\n", inter);
+	if (inter != 0)
+	strcpy(devminor, dec_to_stroct(inter,  8));	*/
 
 	/*If link ...*/
 	if (S_ISLNK(buf.st_mode)){
@@ -302,9 +318,9 @@ void write_header(char *file, char *path, int fd_out){
 	buf[count] = mode[count - 100];
 	else if ( count < 116)
 	buf[count] = uid[count - 108];
-	else if ( count < 124)
+	else if ( count < 124){
 	buf[count] = gid[count - 116];
-	else if ( count < 136)
+	}else if ( count < 136)
 	buf[count] = size[count - 124];
 	else if ( count < 148)
 	buf[count] = mtime[count - 136];
@@ -322,18 +338,18 @@ void write_header(char *file, char *path, int fd_out){
 	buf[count] = uname[count - 265];
 	else if ( count < 329)
 	buf[count] = gname[count - 297];
-	else if ( count < 337)
+	else if ( count < 337){
 	buf[count] = devmajor[count - 329];
-	else if ( count < 345)
+	}else if ( count < 345){
 	buf[count] = devminor[count - 337];
-	else if (count < 510)
+	}else if (count < 510)
 	buf[count] = prefix[count - 345];
 
 
 
 
 	}
-	
+	sum = 0;	
 	/*Getting/writing chksum ...*/
 	for (count = 0; count < BLOCK_SIZE; count++)
 	sum = sum + buf[count];
@@ -352,13 +368,20 @@ void write_header(char *file, char *path, int fd_out){
 int write_file(int fd_in, int fd_out){
 
 	uint8_t buf[BLOCK_SIZE];
-	int ret = read(fd_in, &buf, BLOCK_SIZE);
-        
+	int ret; 
+	int count;
+	        
+	for (count = 0; count<BLOCK_SIZE; count++)
+	buf[count] = 0;
+
+	ret =  read(fd_in, &buf, BLOCK_SIZE);
 	while (ret == BLOCK_SIZE){
 	if (write(fd_out, &buf,  BLOCK_SIZE) !=  BLOCK_SIZE){
 	perror("read");
 	return -1;
         }
+	for (count = 0; count<BLOCK_SIZE; count++)
+        buf[count] = 0;
 	ret = read(fd_in, &buf, BLOCK_SIZE);
 	}
 	if (ret == -1){
@@ -440,13 +463,56 @@ int dfs(char *path, int fd_tar, int *flag_v){
 	closedir(dp);
 	return 0;
 }
+/*For listind we need name (if verbose is on,
+ * 				 we also need size, perm, 
+ * 				 user/grp and mtime)
+ *For extracting we need name and perms. */
 
 void read_tar(int fd_tar, int *flag_v, int *flag_t, int *flag_x)
 {
 	uint8_t buf[BLOCK_SIZE];
+	int count;
+	char *file_name = calloc(200);
+	char *mode = calloc(8);	
+	char *uid;
+	char *gid;
+	char *mtime;
+
+	if (*flag_v == 1 && *flag_t == 1){
+	uid = calloc(8);
+	gid = calloc(8);
+	mtime = calloc(8);
+	if (uid == NULL || gid == NULL || mtime== NULL){
+	perror("malloc");
+	exit(EXIT_FAILURE);}
+	}
 
 
+	read(fd_tar, &buf, BLOCK_SIZE);
+	/*No prefix ...*/
+	if (buf[345] == '\0'){
+	for (count = 0; count < 100; count++)
+	file_name[count] = buf[count];
+	
+	/*Has prefix ...*/
+	}else{
+	int stop = 0;
+	 for (count = 0; buf[count + 345] != '\0'; count++){
+	stop++;
+        file_name[count] = buf[count + 345];}
+	 for (count = 0; count < 100; count++)
+        file_name[stop + count]  = buf[count];
+	}
+	printf("%s \n", file_name);
 
+	if (*flag_v == 1 && *flag_t == 1){
+	free(uid);
+	free(gid);
+	free(mtime);
+        }
+
+	free(mode);
+	free(file_name);	
 }
 
 
@@ -492,6 +558,24 @@ void check_tar(char *file_tar){
         exit(EXIT_FAILURE);
 	}
 	
+
+}
+
+/*Given function ...*/
+int insert_special_int(char *where, size_t size, int32_t val){
+
+int err = 0;	
+
+if (val < 0 || (size < sizeof(val)) ){
+err++;
+}else{
+
+memset(where, 0, size);
+*(int32_t *)(where+size-sizeof(val)) = htonl(val);
+*where |= 0x80;
+}
+
+return err;
 
 }
 
