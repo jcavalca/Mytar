@@ -13,7 +13,7 @@
 # include <arpa/inet.h>
 # include "special.c"
 # include <time.h>
-
+ #include <ctype.h>
 
 # define BLOCK_SIZE 512
 # define CAP_8 2097151
@@ -410,7 +410,7 @@ int dfs(char *path, int fd_tar, int *flag_v){
 
 	while ( (entry = readdir(dp)) != NULL){
 		
-		/*Not interested in traversing up, nor 
+		/*Not intereste in traversing up, nor 
  	   	  getting stuck in a loop ... */
 		if (strcmp(entry -> d_name, ".") != 0 && 
 		  strcmp(entry -> d_name, "..") != 0){
@@ -529,9 +529,9 @@ void print_names(uint8_t buf[BLOCK_SIZE], char *uname, char *gname){
 	printf("  ");
 }
 
-void print_size(char *size, uint8_t buf[BLOCK_SIZE]){
+uint32_t print_size(char *size, uint8_t buf[BLOCK_SIZE]){
 
-	int32_t val;
+	uint32_t val;
 	int count;
   	for (count = 124; count < 136; count++)
         size[count - 124] = buf[count];
@@ -541,7 +541,20 @@ void print_size(char *size, uint8_t buf[BLOCK_SIZE]){
         val = strtol(size, NULL, 8);
         printf( "%13d", val);
 	printf(" ");	
+	return val;
+}
 
+uint32_t get_size(char *size, uint8_t buf[BLOCK_SIZE]){
+
+ 	uint32_t val;
+        int count;
+        for (count = 124; count < 136; count++)
+        size[count - 124] = buf[count];
+        if(size[0] & 0x80)
+        val = extract_special_int(size, 12);
+        else
+        val = strtol(size, NULL, 8);
+        return val;
 }
 
 void print_mtime(char *mtime, uint8_t buf[BLOCK_SIZE]){
@@ -572,26 +585,32 @@ void read_list(int fd_tar, int *flag_v, int *flag_t)
 	uint8_t buf[BLOCK_SIZE];
 	int count;
 	char *file_name = calloc(200, 1);
-	char *mode;	
-	char *uname;
-	char *gname;
-	char *mtime;
-	char *typeflag;
-	char *size;
+	char *size = calloc(12, 1);	
+	char *mode; char *uname; char *gname;char *mtime;
+	char *typeflag; 
 	int mode_int;
+	int dbs; /*# of data blocs to skip*/
+	uint32_t int_size;	
+	int read_ret;
+	int jump;
+	for (count = 0; count < BLOCK_SIZE; count++)
+	buf[count] = 0;
+	if (file_name == NULL || size == NULL){
+        perror("calloc");
+        exit(EXIT_FAILURE);}
 
 	if (-1 == lseek(fd_tar, SEEK_SET, 0))
 	perror("unable to read tar");
-
-	read(fd_tar, &buf, BLOCK_SIZE);
 	
+	read_ret = read(fd_tar, &buf, BLOCK_SIZE);
+
+	while (buf[0] != '\0' || read_ret == 0)	{
 	if (*flag_v == 1 && *flag_t == 1){
 	uname = calloc(8, 1);
 	gname = calloc(8, 1);
 	mtime = calloc(8, 1);
 	typeflag = calloc(1,1);
 	mode = calloc(8, 1);
-	size = calloc(12, 1);
 	if (uname == NULL || gname== NULL ||
 	    mtime== NULL || typeflag == NULL){
 	perror("malloc");
@@ -608,20 +627,19 @@ void read_list(int fd_tar, int *flag_v, int *flag_t)
 	/*Names*/
 	print_names(buf, uname, gname);
 	/*Size*/
-	print_size(size, buf);
+	int_size = print_size(size, buf);
 	/*mtime*/
 	print_mtime(mtime, buf);
 	}
-
-	if (file_name == NULL){
-	perror("malloc");
-        exit(EXIT_FAILURE);}
-
+	if (*flag_v == 0)
+	int_size = get_size(size, buf);
 	/*No prefix ...*/
 	if (buf[345] == '\0'){
-	for (count = 0; count < 100; count++)
+	for (count = 0; count < 100; count++){
+	if (buf[count] == '\0')
+        break;
 	file_name[count] = buf[count];
-	
+	}
 	/*Has prefix ...*/
 	}else{
 	int stop = 0;
@@ -629,12 +647,25 @@ void read_list(int fd_tar, int *flag_v, int *flag_t)
 	stop++;
         file_name[count] = buf[count + 345];}
 	 for (count = 0; count < 100; count++)
-        file_name[stop + count]  = buf[count];
+	if (buf[count] == '\0')
+	break;
+	file_name[stop + count]  = buf[count];
 	}
 	printf("%s \n", file_name);
+	
+	/*Jump data blocks of current file ...*/
+	dbs = int_size / BLOCK_SIZE;
+	if (int_size % BLOCK_SIZE != 0)
+	dbs = dbs + 1;
+	jump = dbs * BLOCK_SIZE;
+	if (dbs != 0){	
+	if (-1 == lseek(fd_tar, jump , SEEK_CUR))
+	perror("lseek");	
+	}
 
-
-	free(file_name);	
+	read_ret = read(fd_tar, &buf, BLOCK_SIZE);
+	}
+	 free(file_name);
 }
 
 
@@ -664,22 +695,32 @@ void command_parser( int *flag_c, int *flag_t, int *flag_x, int *flag_v,
 	}
 }
 
-void check_tar(char *file_tar){
+void check_tar(char *file_tar, int fd_tar){
 	struct stat buf;
+	char read_buf[BLOCK_SIZE];
 	if (-1 == lstat(file_tar, &buf)){
 	perror("lstat");
 	exit(EXIT_FAILURE);
 	}
-	
+
+	if (-1 == read(fd_tar, read_buf, BLOCK_SIZE)){
+	perror("read");
+	 exit(EXIT_FAILURE);
+	}		
+
 	if (S_ISREG(buf.st_mode) || 	 /*tar should be reg. files*/
 	buf.st_size % BLOCK_SIZE == 0 || /*tar should have integer # blocks*/
-	buf.st_size == 0)		 /*tar should be non=empty*/
+	buf.st_size != 0 ||		 /*tar should be non=empty*/
+	isalpha(read_buf[0]) != 0)
 	return;
 	else{
 	perror("malformed tar file");
         exit(EXIT_FAILURE);
 	}
-	
+	if (-1 == lseek(fd_tar, 0, SEEK_SET)){
+        perror("lstat");
+        exit(EXIT_FAILURE);
+        }
 
 }
 
@@ -771,7 +812,7 @@ int main(int argc, char *argv[]){
 	exit(EXIT_FAILURE);
 	}
 	
-	check_tar(argv[2]);
+	check_tar(argv[2], fd_tar);
 	read_list(fd_tar, flag_v, flag_t);
 	}
 
