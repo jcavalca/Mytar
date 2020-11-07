@@ -39,7 +39,7 @@ int format_name_prefix(char *name, char *prefix,
         name[count] = path[count];
         name[count] = '\0';
 	if (len_path != 0)
-	if (name[count -1] != '/')
+	if (name[count - 1] != '/')
 	strcat(name, "/");
         strcat(name, file);
 	return 0;
@@ -56,6 +56,7 @@ int format_name_prefix(char *name, char *prefix,
 	else{
 	strcpy(name, file);
 	strcpy(prefix, path);
+	if (path[len_path] != '/')
 	strcat(prefix, "/");
 	return 0;	
 	}
@@ -422,6 +423,7 @@ int dfs(char *path, int fd_tar, int *flag_v){
 		for (count = 0; count < strlen(path); count++)
 		new_path[count] = path[count];
 		new_path[count] = '\0';
+		if (new_path[count-1] != '/')	
 		strcat(new_path, "/");
                 strcat(new_path , entry ->d_name);
 		if (*flag_v == 1)
@@ -572,15 +574,42 @@ void print_mtime(char *mtime, uint8_t buf[BLOCK_SIZE]){
 	if (tm != NULL)
 	strftime(out, 20, "%Y-%m-%d %H:%M", tm);
 	printf("%s ", out);
+}
+
+/*This checks if we should list a file ...*/
+int file_check(char *file_name, int *flag_specific, 
+		int num_s, char **specific_file){
+
+	/*No specific files given ...*/
+	if (*flag_specific == 0)
+	return 1;	
+	/*Checking if file is in the given ones ...*/
+	else if (*flag_specific == 1){
+	int count;
+	for (count = 0; count < num_s; count++){
+	if (strcmp(specific_file[count], file_name) == 0)
+	return 1;
+	}
+	}
+	/*Couldn't find it ...*/
+	return 0;
 
 
+}
+
+
+void zero_buf(uint8_t buf[BLOCK_SIZE]){
+	int count;
+	for (count = 0; count < BLOCK_SIZE; count++)
+        buf[count] = 0;
 }
 
 /*For listind we need name (if verbose is on,
  * 				 we also need size, perm, 
  * 				 user/grp and mtime)
 */
-void read_list(int fd_tar, int *flag_v, int *flag_t)
+void read_list(int fd_tar, int *flag_v, int *flag_t, 
+		int *flag_specific, int numb_s, char **specific_files)
 {
 	uint8_t buf[BLOCK_SIZE];
 	int count;
@@ -593,8 +622,10 @@ void read_list(int fd_tar, int *flag_v, int *flag_t)
 	uint32_t int_size;	
 	int read_ret;
 	int jump;
-	for (count = 0; count < BLOCK_SIZE; count++)
-	buf[count] = 0;
+	int check = 0;
+
+	zero_buf(buf);
+
 	if (file_name == NULL || size == NULL){
         perror("calloc");
         exit(EXIT_FAILURE);}
@@ -605,6 +636,31 @@ void read_list(int fd_tar, int *flag_v, int *flag_t)
 	read_ret = read(fd_tar, &buf, BLOCK_SIZE);
 
 	while (buf[0] != '\0' || read_ret == 0)	{
+
+	/*File name w/ no prefix ...*/	
+	if (buf[345] == '\0'){
+        for (count = 0; count < 100; count++){
+        if (buf[count] == '\0')
+        break;
+        file_name[count] = buf[count];
+        }	
+	/*W/ prefix ...*/
+        }else{
+        int stop = 0;
+         for (count = 0; buf[count + 345] != '\0'; count++){
+        stop++;
+        file_name[count] = buf[count + 345];}
+        for (count = 0; count < 100; count++)
+	if (count == 0 && buf[0] == '/')
+	continue;	
+	else{
+        if (buf[count] == '\0')
+        break;
+        file_name[stop + count]  = buf[count];}
+        }
+	
+	check = file_check(file_name, flag_specific, numb_s, specific_files);
+		
 	if (*flag_v == 1 && *flag_t == 1){
 	uname = calloc(8, 1);
 	gname = calloc(8, 1);
@@ -616,41 +672,29 @@ void read_list(int fd_tar, int *flag_v, int *flag_t)
 	perror("malloc");
 	exit(EXIT_FAILURE);}
 
+
 	/*Type of file ...*/
 	*typeflag = buf[156];
+	if (check == 1)
 	print_type(typeflag);
 	/*Mode ..*/
 	for (count = 100; count < 108; count++)
 	mode[count - 100] = buf[count];
 	mode_int = strtol(mode, NULL, 8);
+	if (check == 1)
 	print_perm(mode_int);
 	/*Names*/
+	if (check == 1)
 	print_names(buf, uname, gname);
 	/*Size*/
+	if (check == 1)
 	int_size = print_size(size, buf);
 	/*mtime*/
+	if (check == 1)
 	print_mtime(mtime, buf);
 	}
-	if (*flag_v == 0)
 	int_size = get_size(size, buf);
-	/*No prefix ...*/
-	if (buf[345] == '\0'){
-	for (count = 0; count < 100; count++){
-	if (buf[count] == '\0')
-        break;
-	file_name[count] = buf[count];
-	}
-	/*Has prefix ...*/
-	}else{
-	int stop = 0;
-	 for (count = 0; buf[count + 345] != '\0'; count++){
-	stop++;
-        file_name[count] = buf[count + 345];}
-	 for (count = 0; count < 100; count++)
-	if (buf[count] == '\0')
-	break;
-	file_name[stop + count]  = buf[count];
-	}
+	if (check == 1)
 	printf("%s \n", file_name);
 	
 	/*Jump data blocks of current file ...*/
@@ -733,6 +777,7 @@ int main(int argc, char *argv[]){
 	int *flag_x = malloc(sizeof(int));
 	int *flag_v = malloc(sizeof(int));
 	int *flag_S = malloc(sizeof(int));
+	int *flag_specific = malloc(sizeof(int));
 	uint8_t *end_tar = calloc(2*BLOCK_SIZE, 1);
 	int count;
 	struct stat buf;	
@@ -742,12 +787,13 @@ int main(int argc, char *argv[]){
 
 	if ((flag_c == NULL) || (flag_t == NULL)
 		|| (flag_x == NULL) || (end_tar == NULL) ||
-		 (flag_v == NULL) || (flag_S == NULL))
+		 (flag_v == NULL) || (flag_S == NULL)
+		|| (flag_specific == NULL))
 	{
 	perror("malloc");
 	exit(EXIT_FAILURE);
 	}
-	
+	*flag_specific = 0;
 	
 	/*Setting all flags to false ...*/
         *flag_c = 0;
@@ -805,7 +851,17 @@ int main(int argc, char *argv[]){
 	free(end_tar);
 	}
 	
+
 	else if(*flag_t == 1){
+	char **specific_files;	
+	/*If listing specific files ...*/
+	if (argc>3){
+	*flag_specific = 1;
+	specific_files = malloc((argc - 3)*sizeof(char*));
+	for (count = 3; count < argc ; count++)
+	specific_files[count - 3] = argv[count];
+	}
+
 	fd_tar = open(argv[2], O_RDONLY);
 	if (-1 == fd_tar){
 	perror("could not open tar");	
@@ -813,7 +869,8 @@ int main(int argc, char *argv[]){
 	}
 	
 	check_tar(argv[2], fd_tar);
-	read_list(fd_tar, flag_v, flag_t);
+	read_list(fd_tar, flag_v, flag_t, flag_specific, 
+		argc - 3,  specific_files);
 	}
 
 
