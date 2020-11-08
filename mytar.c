@@ -448,19 +448,24 @@ int main(int argc, char *argv[]){
         perror("couldn't create tar file");
         exit(EXIT_FAILURE);
         }
-
-
-
 	/*Writing all arguments ...*/
 	for (count = 3; count < argc; count++){
-	write_header2(argv[count], NULL, fd_tar);	
+	int len = strlen(argv[count]);
 	if (-1 == lstat(argv[count], &buf))
-	perror("lstat");
+        perror("lstat");
+	
+	if (S_ISDIR(buf.st_mode) && argv[count][len] != '/')
+	write_header2(strcat(argv[count], "/"), NULL, fd_tar);
+	else
+	write_header2(argv[count], NULL, fd_tar);	
+
 	if (*flag_v == 1)
 	printf("%s\n", argv[count]);	
+
 	/*If a dir, don't write file but traverse it ...*/
 	if (S_ISDIR(buf.st_mode))
 	dfs2(argv[count], fd_tar, flag_v);
+
 	/*If a regular file, write file ...*/
 	if (S_ISREG(buf.st_mode)){
 	fd_in = open(argv[count],   O_RDONLY);
