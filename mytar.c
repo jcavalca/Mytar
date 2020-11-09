@@ -454,7 +454,7 @@ int main(int argc, char *argv[]){
 	if (-1 == lstat(argv[count], &buf))
         perror("lstat");
 	
-	if (S_ISDIR(buf.st_mode) && argv[count][len] != '/')
+	if (S_ISDIR(buf.st_mode) && argv[count][len - 1] != '/')
 	write_header2(strcat(argv[count], "/"), NULL, fd_tar);
 	else
 	write_header2(argv[count], NULL, fd_tar);	
@@ -464,7 +464,7 @@ int main(int argc, char *argv[]){
 
 	/*If a dir, don't write file but traverse it ...*/
 	if (S_ISDIR(buf.st_mode))
-	dfs2(argv[count], fd_tar, flag_v);
+	dfs2(argv[count], NULL, fd_tar, flag_v);
 
 	/*If a regular file, write file ...*/
 	if (S_ISREG(buf.st_mode)){
