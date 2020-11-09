@@ -40,20 +40,6 @@ void get_name(char *file_name, uint8_t buf[BLOCK_SIZE]){
         }
         /*W/ prefix ...*/
         }else{
-	/*
-        int stop = 0;
-        for (count = 345; count < 500; count++){
-        file_name[count - 345] = buf[count + 345];
-	if (buf[count] == '\0'){
-	stop = count;
-	break;	}
-	}
-	file_name[stop] = '/';
-        for (count = 0; count < 100; count++){
-	file_name[stop + count]  = buf[count];
-	if (buf[count] == '\0')
-        break;
-	}*/
 	char prefix[155];
 	char name[100];	
 	for (count = 345; count < 345 + 155; count++)
@@ -218,6 +204,7 @@ void read_x(int fd_tar, int *flag_v,
 	
 	if (-1 == close(open_ret))
 	perror("close");
+	if (check == 1)
 	read_ret = read(fd_tar, &buf, BLOCK_SIZE);
         if (read_ret < 0)
         perror("read");

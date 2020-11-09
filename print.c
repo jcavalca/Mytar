@@ -58,6 +58,19 @@ uint32_t get_size(char *size, uint8_t buf[BLOCK_SIZE]){
         return val;
 }
 
+uint32_t get_mtime(char *mtime, uint8_t buf[BLOCK_SIZE]){
+        time_t val;
+        int count;
+        for (count = 136; count < 148; count++)
+        mtime[count - 136] = buf[count];
+        if(mtime[0] & 0x80)
+        val = extract_special_int(mtime, 12);
+        else
+        val = strtol(mtime, NULL, 8);
+	return val;
+
+}
+
 void print_mtime(char *mtime, uint8_t buf[BLOCK_SIZE]){
         const struct tm *tm;
         time_t val;

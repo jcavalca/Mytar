@@ -46,8 +46,12 @@ int file_check2(char *file_name, int *flag_specific,
         else if (*flag_specific == 1){
         int count;
         for (count = 0; count < num_s; count++){
+	/*If matches ...*/
         if (strcmp(specific_file[count], file_name) == 0)
         return 1;
+	/*Maybe a child from a parent dir ...*/
+	else if (strstr(file_name, specific_file[count]) != NULL)
+	return 1;
         }
         }
         /*Couldn't find it ...*/
