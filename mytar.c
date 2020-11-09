@@ -31,29 +31,40 @@
 
 void get_name(char *file_name, uint8_t buf[BLOCK_SIZE]){
 	int count;
- /*File name w/ no prefix ...*/
+	 /*File name w/ no prefix ...*/
         if (buf[345] == '\0'){
         for (count = 0; count < 100; count++){
-        if (buf[count] == '\0')
-        break;
         file_name[count] = buf[count];
+	 if (buf[count] == '\0')
+        break;
         }
         /*W/ prefix ...*/
         }else{
+	/*
         int stop = 0;
-        for (count = 0; buf[count + 345] != '\0'; count++){
-        stop++;
-        file_name[count] = buf[count + 345];}
-        for (count = 0; count < 100; count++)
-        if (count == 0 && buf[0] == '/')
-        continue;
-        else{
-        if (buf[count] == '\0')
+        for (count = 345; count < 500; count++){
+        file_name[count - 345] = buf[count + 345];
+	if (buf[count] == '\0'){
+	stop = count;
+	break;	}
+	}
+	file_name[stop] = '/';
+        for (count = 0; count < 100; count++){
+	file_name[stop + count]  = buf[count];
+	if (buf[count] == '\0')
         break;
-        file_name[stop + count]  = buf[count];}
-        }
-
-}
+	}*/
+	char prefix[155];
+	char name[100];	
+	for (count = 345; count < 345 + 155; count++)
+	prefix[count - 345] = buf[count];
+	for (count = 0; count < 100; count++)
+        name[count] = buf[count];	
+	strcpy(file_name, prefix);
+	strcat(file_name, "/");	
+	strcat(file_name, name);
+	}
+	}
 
 void zero_buf(uint8_t buf[BLOCK_SIZE]){
 	int count;
@@ -261,6 +272,7 @@ void read_t(int fd_tar, int *flag_v, int *flag_t,
 	int read_ret;
 	int jump;
 	int check = 0;
+	int len;
 	typeflag = calloc(1,1);
 	zero_buf(buf);
 
@@ -278,27 +290,11 @@ void read_t(int fd_tar, int *flag_v, int *flag_t,
 	}
 	while (buf[0] != '\0' || read_ret == 0)	{
 
-	/*File name w/ no prefix ...*/	
-	if (buf[345] == '\0'){
-        for (count = 0; count < 100; count++){
-        if (buf[count] == '\0')
-        break;
-        file_name[count] = buf[count];
-        }	
-	/*W/ prefix ...*/
-        }else{
-        int stop = 0;
-         for (count = 0; buf[count + 345] != '\0'; count++){
-        stop++;
-        file_name[count] = buf[count + 345];}
-        for (count = 0; count < 100; count++)
-	if (count == 0 && buf[0] == '/')
-	continue;	
-	else{
-        if (buf[count] == '\0')
-        break;
-        file_name[stop + count]  = buf[count];}
-        }
+	get_name(file_name, buf);
+	len = strlen(file_name);
+	if (file_name[len - 1] == '/' && file_name[len - 2] == '/')
+	file_name[len -1] = '\0';
+	
 	*typeflag = buf[156];
 	
 	check = file_check2(file_name, flag_specific, numb_s, specific_files);
