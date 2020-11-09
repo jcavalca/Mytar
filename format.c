@@ -1,6 +1,9 @@
 /*This file has two formatting functions used 
  * for formatting the headers specs according to 
  * the std - used for creating tar archive*/
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <unistd.h>
 
 # define CAP_8 2097151
 
@@ -15,7 +18,7 @@ int format_name_prefix2(char *name, char *prefix,
         else
         len_path = strlen(path);
         /*If everything fits in name ...*/
-        if (strlen(file) + len_path + 1 <= 100){
+        if (strlen(file) + len_path  <= 100){
         
         int count = 0;
         
@@ -52,18 +55,18 @@ int format_name_prefix2(char *name, char *prefix,
                 return -1;
         }
 	/*If path and file name is too big, try to break path ...*/
-        else if(len_path + strlen(file) + 1 > 100){
+        else if(len_path + strlen(file) > 100){
         int count = 0;
         int break_point;
         int success = 0;
-        int name_count;
+        int name_count = 0;
         for (count = 0; count < len_path; count++){
 
         if (path[count] == '/'){
-                if (len_path + strlen(file) + 1 - count <= 100){
+                if (len_path + strlen(file) +  - count <= 100){
                 success = 1;
                 break_point = count;
-                break;
+		break;
                 }
                 }
         }
@@ -73,16 +76,17 @@ int format_name_prefix2(char *name, char *prefix,
         /*If able to break ...*/
                 /*Put a little path on name*/
         for (count = 0; count < len_path; count++){
-        if (count <= break_point)
+        if (break_point >= count){
+	if(break_point > count)	/*Not putting slash into prefix*/
         prefix[count] = path[count];
-        else{
+        }else{
         name[name_count] = path[count];
         name_count++;
         }
         }
-        if (name[name_count -1] != '/')
+        if (name[name_count -1] != '/' && name[name_count] != '/'){
         name[name_count] = '/';
-        name_count++;
+        name_count++;}
                 /*Put file name on name*/
         for (count = 0; count < strlen(name); count++){
         name[name_count] = file[count];

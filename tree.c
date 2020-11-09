@@ -1,7 +1,15 @@
 /*This file contains a function that does a dfs 
  * on a directory given when creating a tar archive*/
 #include <unistd.h>
+
+void path_copy(char *new_path, char *path){
+
+	int count;
 	
+	for (count = 0; count < strlen(path); count++)
+                new_path[count] = path[count];
+                new_path[count] = '\0';
+}	
 
 
 int dfs2(char *path, char *new, int fd_tar, int *flag_v){
@@ -43,18 +51,14 @@ int dfs2(char *path, char *new, int fd_tar, int *flag_v){
 	
                 /*Strcpy was giving me a hard time ...*/
                 char *new_path = calloc(PATH_MAX, 1);
-                int count = 0;
                 int fd_in ;
-		if (inner_dir > 0)
-		chdir("..");
-
-                for (count = 0; count < strlen(path); count++)
-                new_path[count] = path[count];
-                new_path[count] = '\0';
-                if (new_path[count-1] != '/')
+	/*	if (inner_dir > 0)
+		chdir("..");*/
+	 	path_copy(new_path, path);
+                if (new_path[strlen(new_path) -1] != '/')
                 strcat(new_path, "/");
                 strcat(new_path , entry ->d_name);
-		if(new_path[strlen(new_path)] == '/' &&
+		if(new_path[strlen(new_path) -1] == '/' &&
 			new_path[strlen(new_path) - 1] == '/')
 		new_path[strlen(new_path)] = '\0';
                 if (*flag_v == 1)
@@ -92,6 +96,7 @@ int dfs2(char *path, char *new, int fd_tar, int *flag_v){
                 }
 	
         }
+	chdir("..");
         closedir(dp);
         return 0;
 }
