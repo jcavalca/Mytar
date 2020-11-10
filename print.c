@@ -1,31 +1,31 @@
 /*This file contains usefuls functions for printing 
  * when listing a tar file .*/
 
-# define BLOCK_SIZE 512
+# include "define.h"
 
 void print_type(char *typeflag){
-if (*typeflag == '0' || *typeflag == '\0')
+if (*typeflag == TYPE_FILE || *typeflag == TYPE_FILE_AL)
         printf("-");
-        else if (*typeflag == '2')
+        else if (*typeflag == TYPE_LINK)
         printf("l");
-        else if (*typeflag == '5')
+        else if (*typeflag == TYPE_DIR)
         printf("d");
 }
 
 void print_names(uint8_t buf[BLOCK_SIZE], char *uname, char *gname){
 
         int count;
-        for (count = 265; count < 273; count++){
+        for (count = UNAME_START; count < UNAME_STOP; count++){
         if (buf[count] == '\0')
         break;
-        uname[count - 265] = buf[count];
+        uname[count - UNAME_START] = buf[count];
         }
 
         printf("%s/", uname);
-        for (count = 297; count < 305; count++){
+        for (count = GNAME_START; count < GNAME_STOP; count++){
         if (buf[count] == '\0')
         break;
-        gname[count - 297] = buf[count];
+        gname[count - GNAME_START] = buf[count];
         }
         printf("%s", gname);
         printf("  ");
@@ -35,10 +35,10 @@ uint32_t print_size(char *size, uint8_t buf[BLOCK_SIZE]){
 
         uint32_t val;
         int count;
-        for (count = 124; count < 136; count++)
-        size[count - 124] = buf[count];
+        for (count = SIZE_START; count < SIZE_STOP; count++)
+        size[count - SIZE_START] = buf[count];
         if(size[0] & 0x80)
-        val = extract_special_int(size, 12);
+        val = extract_special_int(size, SIZE_STOP - SIZE_START);
         else
         val = strtol(size, NULL, 8);
         printf( "%13d", val);
@@ -49,10 +49,10 @@ uint32_t print_size(char *size, uint8_t buf[BLOCK_SIZE]){
 uint32_t get_size(char *size, uint8_t buf[BLOCK_SIZE]){
         uint32_t val;
         int count;
-        for (count = 124; count < 136; count++)
-        size[count - 124] = buf[count];
+        for (count = SIZE_START; count < SIZE_STOP; count++)
+        size[count - SIZE_START] = buf[count];
         if(size[0] & 0x80)
-        val = extract_special_int(size, 12);
+        val = extract_special_int(size, SIZE_STOP - SIZE_START);
         else
         val = strtol(size, NULL, 8);
         return val;
@@ -61,10 +61,10 @@ uint32_t get_size(char *size, uint8_t buf[BLOCK_SIZE]){
 uint32_t get_mtime(char *mtime, uint8_t buf[BLOCK_SIZE]){
         time_t val;
         int count;
-        for (count = 136; count < 148; count++)
-        mtime[count - 136] = buf[count];
+        for (count = MTIME_START; count < MTIME_STOP; count++)
+        mtime[count - MTIME_START] = buf[count];
         if(mtime[0] & 0x80)
-        val = extract_special_int(mtime, 12);
+        val = extract_special_int(mtime,MTIME_STOP- MTIME_START);
         else
         val = strtol(mtime, NULL, 8);
 	return val;
@@ -76,10 +76,10 @@ void print_mtime(char *mtime, uint8_t buf[BLOCK_SIZE]){
         time_t val;
         int count;
         char out[20];
-        for (count = 136; count < 148; count++)
-        mtime[count - 136] = buf[count];
+        for (count = MTIME_START; count < MTIME_STOP; count++)
+        mtime[count - MTIME_START] = buf[count];
         if(mtime[0] & 0x80)
-        val = extract_special_int(mtime, 12);
+        val = extract_special_int(mtime, MTIME_STOP- MTIME_START);
         else
         val = strtol(mtime, NULL, 8);
         tm = localtime(&val);

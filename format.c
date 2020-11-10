@@ -5,8 +5,7 @@
 # include <sys/stat.h>
 # include <unistd.h>
 
-# define CAP_8 2097151
-
+# include "define.h"
 int format_name_prefix2(char *name, char *prefix,
                                 char *file, char *path){
 
@@ -18,7 +17,7 @@ int format_name_prefix2(char *name, char *prefix,
         else
         len_path = strlen(path);
         /*If everything fits in name ...*/
-        if (strlen(file) + len_path  <= 100){
+        if (strlen(file) + len_path  <= NAME_CAP){
         
         int count = 0;
         
@@ -33,12 +32,12 @@ int format_name_prefix2(char *name, char *prefix,
         }
 
         /*If name is full ...*/
-        else if (strlen(file) == 100){
+        else if (strlen(file) == NAME_CAP){
         if (len_path == 0){
         strcpy(name, file);
         return 0;
         }
-        else if(len_path >= 100)
+        else if(len_path >= NAME_CAP)
         return -1;
         else{
         strcpy(name, file);
@@ -51,11 +50,11 @@ int format_name_prefix2(char *name, char *prefix,
 
         else{
         /*If file name is too big, there isn't a way to break it...*/
-        if(strlen(file) > 100){
+        if(strlen(file) > NAME_CAP){
                 return -1;
         }
 	/*If path and file name is too big, try to break path ...*/
-        else if(len_path + strlen(file) > 100){
+        else if(len_path + strlen(file) > NAME_CAP){
         int count = 0;
         int break_point;
         int success = 0;
@@ -63,7 +62,7 @@ int format_name_prefix2(char *name, char *prefix,
         for (count = 0; count < len_path; count++){
 
         if (path[count] == '/'){
-                if (len_path + strlen(file) +  - count <= 100){
+                if (len_path + strlen(file) +  - count <= NAME_CAP){
                 success = 1;
                 break_point = count;
 		break;
@@ -186,7 +185,8 @@ int format_from_lstat2(char *file, char *path, char *mode,
 
         /*Getting size ...*/
         if (S_ISREG(buf.st_mode)){
-
+					/*Cap for 12 bits octal ... throws error
+ * 						when implemented as a macro*/
                 if (non_conforming_check((int) buf.st_size, 8589934591))
                 insert_special_int(size, 8, (int32_t) buf.st_size);
                 else{
@@ -214,7 +214,7 @@ int format_from_lstat2(char *file, char *path, char *mode,
 
         /*If link ...*/
         if (S_ISLNK(buf.st_mode)){
-        if (-1 == readlink(file, linkname, 100))
+        if (-1 == readlink(file, linkname, NAME_CAP))
         perror("return readlink");
         return -1;
 

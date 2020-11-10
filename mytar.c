@@ -92,7 +92,7 @@ void write_contents(char *file_name, int fd_tar, int size){
 	
 	if (write_ret < 0)
 	perror("write");
-
+	if (count != dbs - 1)
 	read_ret = read(fd_tar, &buf, BLOCK_SIZE);
 	
 	}
@@ -112,6 +112,8 @@ void read_x(int fd_tar, int *flag_v,
 	char *mtime = calloc(8, 1);
 	int read_ret, check, exec = 0, int_size = 0, mode_int = 0;
 	int open_ret;		
+	struct stat test;
+	int dir_open = 1;
 	if (file_name == NULL || size == NULL || 
 		typeflag == NULL || mode == NULL ||
 		mtime == NULL){
@@ -179,22 +181,38 @@ void read_x(int fd_tar, int *flag_v,
 	}
 	/*If a directory ...*/
 	else if (*typeflag == '5'){	
+		if (-1 == lstat(file_name, &test)){
+		dir_open = 1;
+		if (exec == 1)
 		open_ret = mkdir(file_name, 
                         (S_IRUSR | S_IWUSR| S_IXUSR |
                          S_IRGRP | S_IWGRP | S_IXGRP |
                          S_IROTH | S_IWOTH | S_IXOTH) );	
+		else
+		open_ret =  mkdir(file_name,
+                        (S_IRUSR | S_IWUSR|
+                         S_IRGRP | S_IWGRP |
+                         S_IROTH | S_IWOTH));
+		}
+		else{
+		open_ret = 1;
+		dir_open = 0;}
 	}
-	if (open_ret < 0)
-	printf("unable to extract %s\n", file_name);
-	else{
+	if ((open_ret < 0 && *typeflag != '5'))
+	perror("unable to extract");
+	else if (!(*typeflag == '5' && dir_open == 0)){
 	if (*typeflag != '0' && *typeflag != '\0')
 	close(open_ret);}
-	if (open_ret > 0 && check == 1 &&  
+	if (open_ret >= 0 && check == 1 &&  
 		(*typeflag == '0' || *typeflag == '\0'))
 	write_contents(file_name, fd_tar, int_size);
 
+
+	
 	/*Restoring mtime ...*/
-	if (open_ret >= 0){
+	if (open_ret >= 0 &&
+		!(*typeflag == '5')
+	){
 	struct utimbuf time;
 	int val = get_mtime(mtime, buf);
 
@@ -204,10 +222,6 @@ void read_x(int fd_tar, int *flag_v,
 	if ( -1 == utime(file_name, &time))
 	perror("utime");
 	}
-		
-	
-	if (-1 == close(open_ret))
-	perror("close");
 	if (check == 1)/*Getting next file ...*/
 	read_ret = read(fd_tar, &buf, BLOCK_SIZE);
         if (read_ret < 0)

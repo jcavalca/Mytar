@@ -16,25 +16,21 @@ int dfs2(char *path, char *new, int fd_tar, int *flag_v){
         DIR *dp;
         struct dirent *entry;
         struct stat buf; /*used for checking entries*/
-        char *test = malloc(100);
 	int inner_dir = 0;
  
 
        /*Report error and don't stop ...*/
 	if (new== NULL){
         if(chdir(path) != 0){
-	test = getcwd(test, 100);
         perror(path);
         return 0;
 	}}
 	else{
 	if(chdir(new) != 0){
-        test = getcwd(test, 100);
         perror(path);
         return 0;
         }
 	}
-	free(test);	
         /*Opening directory specified*/
         dp = opendir(".");
         if (dp == NULL){

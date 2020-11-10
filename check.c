@@ -13,7 +13,7 @@ void check_tar2(char *file_tar, int fd_tar){
 
         if (-1 == read(fd_tar, read_buf, BLOCK_SIZE)){
         perror("read");
-         exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
         }
 
         if (S_ISREG(buf.st_mode) ||      /*tar should be reg. files*/

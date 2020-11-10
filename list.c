@@ -1,24 +1,25 @@
 /*This file contains the implementation of the t flag ...*/
 
-
-
+# define NAME_CAP 100
+# define PREFIX_CAP 155
+# define PREFIX_START 345
 
 void get_nameT(char *file_name, uint8_t buf[BLOCK_SIZE]){
         int count;
          /*File name w/ no prefix ...*/
-        if (buf[345] == '\0'){
-        for (count = 0; count < 100; count++){
+        if (buf[PREFIX_START] == '\0'){
+        for (count = 0; count < NAME_CAP; count++){
         file_name[count] = buf[count];
          if (buf[count] == '\0')
         break;
         }
         /*W/ prefix ...*/
         }else{
-        char prefix[155];
-        char name[100];
-        for (count = 345; count < 345 + 155; count++)
-        prefix[count - 345] = buf[count];
-        for (count = 0; count < 100; count++)
+        char prefix[PREFIX_CAP];
+        char name[NAME_CAP];
+        for (count = PREFIX_START; count < PREFIX_START + PREFIX_CAP; count++)
+        prefix[count - PREFIX_START] = buf[count];
+        for (count = 0; count < NAME_CAP; count++)
         name[count] = buf[count];
         strcpy(file_name, prefix);
         strcat(file_name, "/");
@@ -42,7 +43,7 @@ void read_t2(int fd_tar, int *flag_v, int *flag_t,
 {
         uint8_t buf[BLOCK_SIZE];
         int count;
-        char *file_name = calloc(200, 1);
+        char *file_name = calloc(NAME_CAP + PREFIX_CAP, 1);
         char *size = calloc(12, 1);
         char *mode; char *uname; char *gname;char *mtime;
         char *typeflag;
