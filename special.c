@@ -4,6 +4,9 @@
 
 /*Given functions ...*/
 
+/*Inserts a number when it is non conforming
+  to the octal representation defined by ustar
+  standard. */
 int insert_special_int(char *where, size_t size, int32_t val){
 
 int err = 0;
@@ -19,6 +22,10 @@ memset(where, 0, size);
 
 return err;
 }
+
+/*Inserts a number when it is non conforming
+  to the octal representation defined by ustar
+  standard. */
 
 uint32_t extract_special_int(char *where, int len){
 

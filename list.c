@@ -1,38 +1,5 @@
 /*This file contains the implementation of the t flag ...*/
 
-# define NAME_CAP 100
-# define PREFIX_CAP 155
-# define PREFIX_START 345
-
-void get_nameT(char *file_name, uint8_t buf[BLOCK_SIZE]){
-        int count;
-         /*File name w/ no prefix ...*/
-        if (buf[PREFIX_START] == '\0'){
-        for (count = 0; count < NAME_CAP; count++){
-        file_name[count] = buf[count];
-         if (buf[count] == '\0')
-        break;
-        }
-        /*W/ prefix ...*/
-        }else{
-        char prefix[PREFIX_CAP];
-        char name[NAME_CAP];
-        for (count = PREFIX_START; count < PREFIX_START + PREFIX_CAP; count++)
-        prefix[count - PREFIX_START] = buf[count];
-        for (count = 0; count < NAME_CAP; count++)
-        name[count] = buf[count];
-        strcpy(file_name, prefix);
-        strcat(file_name, "/");
-        strcat(file_name, name);
-        }
-        }
-
-void zero_bufT(uint8_t buf[BLOCK_SIZE]){
-        int count;
-        for (count = 0; count < BLOCK_SIZE; count++)
-        buf[count] = 0;
-}
-
 
 /*For listing we need name (if verbose is on,
                                we also need size, perm, 
@@ -55,7 +22,7 @@ void read_t2(int fd_tar, int *flag_v, int *flag_t,
         int check = 0;
         int len;
         typeflag = calloc(1,1);
-        zero_bufT(buf);
+        zero_buf(buf);
 
         if (file_name == NULL || size == NULL || typeflag == NULL){
         perror("calloc");
@@ -71,7 +38,7 @@ void read_t2(int fd_tar, int *flag_v, int *flag_t,
         }
         while (buf[0] != '\0' || read_ret == 0) {
 
-        get_nameT(file_name, buf);
+        get_name(file_name, buf);
         len = strlen(file_name);
         if (file_name[len - 1] == '/' && file_name[len - 2] == '/')
         file_name[len -1] = '\0';

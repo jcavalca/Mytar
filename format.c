@@ -5,7 +5,6 @@
 # include <sys/stat.h>
 # include <unistd.h>
 
-# include "define.h"
 int format_name_prefix2(char *name, char *prefix,
                                 char *file, char *path){
 

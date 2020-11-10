@@ -1,12 +1,9 @@
 CC = gcc
 
-CFLAGS =  -Wall -pedantic -g
+CFLAGS = -Wall -pedantic -g
 
 
-all: mytar.c
-	make mytar
-mytar: mytar.c
+all: mytar
+mytar: mytar.c check.c format.c oct.c print.c special.c tree.c write.c list.c extract.c share.c define.h
 	$(CC) $(CFLAGS) -o mytar mytar.c
-clean: 
-	rm mytar
 

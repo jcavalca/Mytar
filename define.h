@@ -49,3 +49,7 @@
 # define SIZE_STOP 136
 # define MTIME_START 136
 # define MTIME_STOP 148
+
+# define NAME_CAP 100
+# define PREFIX_CAP 155
+# define PREFIX_START 345
