@@ -20,13 +20,13 @@ Here are example runs for this program :
  $ ./mytar cvf test.tar War_And_Peace.txt 
 War_And_Peace.txt
 
-./mytar tf test.tar 
+ $ ./mytar tf test.tar 
 War_And_Peace.txt 
 
-./mytar tvf test.tar 
+ $ ./mytar tvf test.tar 
 -rw------- jcavalca/domain u        3286874 2020-11-12 10:12 War_And_Peace.txt 
 
-./mytar xvf test.tar 
+ $ ./mytar xvf test.tar 
 War_And_Peace.txt
 
 
